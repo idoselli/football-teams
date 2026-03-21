@@ -24,6 +24,21 @@ Then open:
 http://127.0.0.1:8000
 ```
 
+## Deploy on Render
+
+This app is now set up to run on Render:
+
+- It listens on `0.0.0.0`
+- It uses Render's `PORT` environment variable automatically
+- A `render.yaml` file is included for service setup
+- A `requirements.txt` file is included, even though there are no third-party packages
+
+If you deploy manually on Render, the important start command is:
+
+```bash
+python app.py
+```
+
 ## Notes
 
 - No database
