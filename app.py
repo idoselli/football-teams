@@ -43,9 +43,13 @@ PLAYERS = [
 @dataclass(frozen=True)
 class TeamCandidate:
     teams: tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]
+    team_totals: tuple[int, int, int]
     averages: tuple[float, float, float]
     imbalance: float
     spread: float
+    balance_penalty: float
+    teammate_pairs: frozenset[tuple[str, str]]
+    trios: frozenset[tuple[str, str, str]]
 
 
 def team_sizes(player_count: int) -> list[int]:
@@ -77,15 +81,35 @@ def build_candidate(
     teams: tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]],
     roster_lookup: dict[str, dict[str, object]],
 ) -> TeamCandidate:
-    averages = tuple(round(average_skill(team, roster_lookup), 2) for team in teams)
+    team_totals = tuple(team_total_skill(team, roster_lookup) for team in teams)
+    averages = tuple(round(total / len(team), 2) for total, team in zip(team_totals, teams))
     imbalance = round(max(averages) - min(averages), 2)
     center = round(sum(averages) / 3, 4)
     spread = round(sum((average - center) ** 2 for average in averages), 4)
+    target_team_skill = sum(team_totals) / 3
+    balance_penalty = round(sum((total - target_team_skill) ** 2 for total in team_totals), 4)
+
+    teammate_pairs = frozenset(
+        pair
+        for team in teams
+        for pair in combinations(team, 2)
+    )
+    trios = frozenset(
+        trio
+        for team in teams
+        if len(team) >= 3
+        for trio in combinations(team, 3)
+    )
+
     return TeamCandidate(
         teams=teams,
+        team_totals=team_totals,
         averages=averages,
         imbalance=imbalance,
         spread=spread,
+        balance_penalty=balance_penalty,
+        teammate_pairs=teammate_pairs,
+        trios=trios,
     )
 
 
@@ -155,80 +179,31 @@ def generate_candidates(
     return candidates[:110]
 
 
-def candidate_pair_overlap(left: TeamCandidate, right: TeamCandidate) -> tuple[int, int, int]:
-    exact_repeats = 0
-    heavy_overlap = 0
-    total_overlap = 0
-
-    for left_team in left.teams:
-        left_set = set(left_team)
-        for right_team in right.teams:
-            overlap = len(left_set.intersection(right_team))
-            total_overlap += overlap * overlap
-            if overlap == len(left_team) == len(right_team):
-                exact_repeats += 1
-            elif overlap >= min(len(left_team), len(right_team)) - 1:
-                heavy_overlap += 1
-
-    return exact_repeats, heavy_overlap, total_overlap
-
-
-def candidate_balance_penalty(
-    candidate: TeamCandidate,
-    roster_lookup: dict[str, dict[str, object]],
-) -> float:
-    target_team_skill = sum(int(player["skill"]) for player in roster_lookup.values()) / 3
-    return round(
-        sum((team_total_skill(team, roster_lookup) - target_team_skill) ** 2 for team in candidate.teams),
-        4,
-    )
-
-
 def schedule_penalty(
     combo: tuple[TeamCandidate, ...],
-    roster_lookup: dict[str, dict[str, object]],
 ) -> tuple[int, int, float]:
-    full_team_counts: dict[tuple[str, ...], int] = {}
-    teammate_pair_counts: dict[tuple[str, str], int] = {}
-
-    for candidate in combo:
-        for team in candidate.teams:
-            full_team_counts[team] = full_team_counts.get(team, 0) + 1
-            for pair in combinations(team, 2):
-                teammate_pair_counts[pair] = teammate_pair_counts.get(pair, 0) + 1
-
-    repeated_full_teams = sum(count - 1 for count in full_team_counts.values() if count > 1)
-    repeated_teammate_pairs = sum(count - 1 for count in teammate_pair_counts.values() if count > 1)
-    balance_penalty = round(
-        sum(candidate_balance_penalty(candidate, roster_lookup) for candidate in combo),
-        4,
+    repeated_full_teams = sum(len(candidate.teams) for candidate in combo) - len({team for candidate in combo for team in candidate.teams})
+    repeated_teammate_pairs = sum(len(candidate.teammate_pairs) for candidate in combo) - len(
+        {pair for candidate in combo for pair in candidate.teammate_pairs}
     )
+    balance_penalty = round(sum(candidate.balance_penalty for candidate in combo), 4)
     return repeated_full_teams, repeated_teammate_pairs, balance_penalty
 
 
 def repeated_trios_across_schedule(combo: tuple[TeamCandidate, ...]) -> int:
-    trio_sets: list[set[tuple[str, str, str]]] = []
-
-    for candidate in combo:
-        candidate_trios: set[tuple[str, str, str]] = set()
-        for team in candidate.teams:
-            if len(team) < 3:
-                continue
-            for trio in combinations(team, 3):
-                candidate_trios.add(tuple(sorted(trio)))
-        trio_sets.append(candidate_trios)
+    trio_sets = [candidate.trios for candidate in combo]
 
     if not trio_sets:
         return 0
 
-    return len(set.intersection(*trio_sets))
+    shared_trios = set(trio_sets[0]).intersection(*trio_sets[1:])
+    return len(shared_trios)
 
 
 def schedule_score(
     combo: tuple[TeamCandidate, ...],
-    roster_lookup: dict[str, dict[str, object]],
 ) -> tuple[int, int, int, float, float]:
-    repeated_full_teams, repeated_teammate_pairs, balance_penalty = schedule_penalty(combo, roster_lookup)
+    repeated_full_teams, repeated_teammate_pairs, balance_penalty = schedule_penalty(combo)
     repeated_trios = repeated_trios_across_schedule(combo)
     weighted_total = round((1000 * repeated_full_teams) + (10 * repeated_teammate_pairs) + balance_penalty, 4)
     return repeated_trios, repeated_full_teams, repeated_teammate_pairs, balance_penalty, weighted_total
@@ -236,20 +211,21 @@ def schedule_score(
 
 def choose_suggestions(
     candidates: list[TeamCandidate],
-    roster_lookup: dict[str, dict[str, object]],
     limit: int = 3,
 ) -> list[TeamCandidate]:
     if len(candidates) <= limit:
         return candidates
 
-    shortlist = candidates
+    # Exhaustively scoring every 3-candidate schedule gets expensive fast,
+    # so we keep the search focused on the strongest balanced candidates.
+    shortlist = candidates[: min(len(candidates), 42)]
     best_valid_combo: tuple[TeamCandidate, ...] | None = None
     best_valid_score: tuple[int, int, int, float, float] | None = None
     best_fallback_combo: tuple[TeamCandidate, ...] | None = None
     best_fallback_score: tuple[int, int, int, float, float] | None = None
 
     for combo in combinations(shortlist, limit):
-        combo_score = schedule_score(combo, roster_lookup)
+        combo_score = schedule_score(combo)
 
         if best_fallback_score is None or combo_score < best_fallback_score:
             best_fallback_combo = combo
@@ -343,7 +319,7 @@ def generate_suggestions(selected_players: list[dict[str, object]]) -> list[dict
     ordered_ids = sorted(roster_lookup)
 
     candidates = generate_candidates(ordered_ids, roster_lookup)
-    suggestions = choose_suggestions(candidates, roster_lookup)
+    suggestions = choose_suggestions(candidates)
     suggestions.sort(key=lambda candidate: (candidate.imbalance, candidate.spread, candidate.teams))
 
     labels = ["Balanced Option 1", "Balanced Option 2", "Balanced Option 3"]
