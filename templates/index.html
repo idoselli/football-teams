@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Football Team Splitter</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="hero">
+        <p class="eyebrow">Local Match Planner</p>
+        <h1>Pick who is coming and get three balanced team options.</h1>
+        <p class="hero-copy">
+          Choose between 12 and 15 players. The app will split them into 3 teams
+          and keep the average skill as close as possible while varying the team
+          combinations.
+        </p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-kicker">1. Choose Players</p>
+            <h2>Your Group</h2>
+          </div>
+          <div class="selection-pill" id="selection-pill">0 selected</div>
+        </div>
+
+        <p class="section-copy">
+          Fictional players for now. You can swap these with your real group later.
+        </p>
+
+        <div class="players-grid" id="players-grid"></div>
+
+        <div class="guest-panel">
+          <div>
+            <p class="section-kicker">Add Guests</p>
+            <h3>Manual Guest Players</h3>
+            <p class="section-copy">
+              Add casual players by name and skill. Hebrew names work too.
+            </p>
+          </div>
+
+          <form class="guest-form" id="guest-form">
+            <label class="field">
+              <span>Guest Name</span>
+              <input id="guest-name" name="guest-name" type="text" maxlength="40" dir="auto" />
+            </label>
+
+            <label class="field">
+              <span>Skill</span>
+              <input id="guest-skill" name="guest-skill" type="number" min="1" max="10" inputmode="numeric" />
+            </label>
+
+            <button class="secondary-button" type="submit">Add Guest</button>
+          </form>
+
+          <div class="guest-list" id="guest-list"></div>
+        </div>
+      </section>
+
+      <section class="panel action-panel">
+        <button class="generate-button" id="generate-button" type="button">
+          Generate Balanced Teams
+        </button>
+        <p class="helper-text" id="helper-text">
+          Select at least 12 players to unlock team suggestions.
+        </p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-kicker">2. Three Suggestions</p>
+            <h2>Balanced Team Combinations</h2>
+          </div>
+          <button class="secondary-button copy-all-button" id="copy-all-button" type="button" disabled>
+            Copy All Options
+          </button>
+        </div>
+        <div class="results-grid" id="results-grid">
+          <article class="empty-state">
+            <h3>No suggestions yet</h3>
+            <p>Choose your players above and generate your first three options.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      window.APP_PLAYERS = __PLAYER_DATA__;
+    </script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

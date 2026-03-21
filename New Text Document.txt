@@ -1,0 +1,17 @@
+Balanced Option 1
+Team 1: Avi Blaze (9), Roee Sparks (9), Ido Hale (3), Tal Hunter (8), Dean Knight (4)
+Team 2: Shai Wolf (6), Ariel King (5), Amit Ray (8), Ben Cedar (5), Yonatan Cross (8)
+Team 3: Noam Steel (8), Gal Frost (7), Lior Dash (7), Eitan Fox (6), Barak Flint (4)
+Skill spread: 0.2
+
+Balanced Option 2
+Team 1: Avi Blaze (9), Roee Sparks (9), Ido Hale (3), Ariel King (5), Gal Frost (7)
+Team 2: Tal Hunter (8), Ben Cedar (5), Lior Dash (7), Yonatan Cross (8), Barak Flint (4)
+Team 3: Shai Wolf (6), Dean Knight (4), Amit Ray (8), Noam Steel (8), Eitan Fox (6)
+Skill spread: 0.2
+
+Balanced Option 3
+Team 1: Avi Blaze (9), Roee Sparks (9), Ido Hale (3), Amit Ray (8), Barak Flint (4)
+Team 2: Tal Hunter (8), Shai Wolf (6), Ariel King (5), Lior Dash (7), Eitan Fox (6)
+Team 3: Dean Knight (4), Ben Cedar (5), Noam Steel (8), Gal Frost (7), Yonatan Cross (8)
+Skill spread: 0.2
