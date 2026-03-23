@@ -18,6 +18,14 @@ const generateButton = document.getElementById("generate-button");
 const resultsGrid = document.getElementById("results-grid");
 const copyAllButton = document.getElementById("copy-all-button");
 
+function formatSkill(skill) {
+  const numericSkill = Number(skill);
+  if (Number.isInteger(numericSkill)) {
+    return String(numericSkill);
+  }
+  return numericSkill.toFixed(1);
+}
+
 function allPlayers() {
   return [...presetPlayers, ...state.guestPlayers];
 }
@@ -51,7 +59,7 @@ function renderPlayers() {
 
     const skill = document.createElement("span");
     skill.className = "skill-badge";
-    skill.textContent = `Skill ${player.skill}/10`;
+    skill.textContent = `Skill ${formatSkill(player.skill)}/10`;
 
     meta.append(name, skill);
 
@@ -85,7 +93,7 @@ function renderGuests() {
     card.innerHTML = `
       <div>
         <strong dir="auto">${player.name}</strong>
-        <p>Skill ${player.skill}/10</p>
+        <p>Skill ${formatSkill(player.skill)}/10</p>
       </div>
       <button class="ghost-button" type="button" data-remove-id="${player.id}">Remove</button>
     `;
@@ -146,8 +154,8 @@ function addGuest(event) {
     return;
   }
 
-  if (!Number.isInteger(skill) || skill < 1 || skill > 10) {
-    setHelper("Guest skill must be a whole number between 1 and 10.", true);
+  if (Number.isNaN(skill) || skill < 1 || skill > 10) {
+    setHelper("Guest skill must be between 1 and 10.", true);
     guestSkillInput.focus();
     return;
   }
@@ -155,7 +163,7 @@ function addGuest(event) {
   const player = {
     id: `guest-${state.nextGuestId}`,
     name,
-    skill,
+    skill: Math.round(skill * 10) / 10,
     source: "guest",
   };
 
@@ -197,13 +205,10 @@ function buildCopyText(suggestion) {
   const lines = [suggestion.label];
 
   suggestion.teams.forEach((team) => {
-    const playerLine = team.players
-      .map((player) => `${player.name} (${player.skill})`)
-      .join(", ");
-    lines.push(`${team.name}: ${playerLine}`);
+    const playerLine = team.players.map((player) => player.name).join(", ");
+    lines.push(`${team.name} (Avg ${formatSkill(team.average_skill)}): ${playerLine}`);
   });
 
-  lines.push(`Skill spread: ${suggestion.imbalance}`);
   return lines.join("\n");
 }
 
@@ -278,7 +283,7 @@ function renderSuggestions(suggestions) {
                   (player) => `
                     <li class="team-player">
                       <strong dir="auto">${player.name}</strong>
-                      <small>Skill ${player.skill}</small>
+                      <small>Skill ${formatSkill(player.skill)}</small>
                     </li>
                   `
                 )

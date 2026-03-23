@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import os
 import random
@@ -14,36 +15,58 @@ from typing import Iterable
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 TEMPLATE_DIR = BASE_DIR / "templates"
+RATINGS_CSV = BASE_DIR / "ratings.csv"
 
 
-PLAYERS = [
-    {"id": "player-1", "name": "Avi Blaze", "skill": 9},
-    {"id": "player-2", "name": "Noam Steel", "skill": 8},
-    {"id": "player-3", "name": "Lior Dash", "skill": 7},
-    {"id": "player-4", "name": "Eitan Fox", "skill": 6},
-    {"id": "player-5", "name": "Yonatan Cross", "skill": 8},
-    {"id": "player-6", "name": "Matan Vale", "skill": 5},
-    {"id": "player-7", "name": "Gil Storm", "skill": 7},
-    {"id": "player-8", "name": "Omer Stone", "skill": 6},
-    {"id": "player-9", "name": "Barak Flint", "skill": 4},
-    {"id": "player-10", "name": "Roee Sparks", "skill": 9},
-    {"id": "player-11", "name": "Ido Hale", "skill": 3},
-    {"id": "player-12", "name": "Tal Hunter", "skill": 8},
-    {"id": "player-13", "name": "Shai Wolf", "skill": 6},
-    {"id": "player-14", "name": "Ariel King", "skill": 5},
-    {"id": "player-15", "name": "Niv Rivers", "skill": 7},
-    {"id": "player-16", "name": "Dean Knight", "skill": 4},
-    {"id": "player-17", "name": "Amit Ray", "skill": 8},
-    {"id": "player-18", "name": "Ben Cedar", "skill": 5},
-    {"id": "player-19", "name": "Yarin Bolt", "skill": 6},
-    {"id": "player-20", "name": "Gal Frost", "skill": 7},
-]
+def load_players_from_csv(csv_path: Path) -> list[dict[str, object]]:
+    players: list[dict[str, object]] = []
+
+    with csv_path.open("r", encoding="utf-8-sig", newline="") as csv_file:
+        reader = csv.reader(csv_file)
+
+        for index, row in enumerate(reader, start=1):
+            if not row or all(not cell.strip() for cell in row):
+                continue
+
+            if len(row) < 2:
+                raise ValueError(f"Row {index} in {csv_path.name} must include name and rating.")
+
+            name = row[0].strip()
+            skill_text = row[1].strip()
+
+            if not name:
+                raise ValueError(f"Row {index} in {csv_path.name} is missing a player name.")
+
+            try:
+                skill = round(float(skill_text), 2)
+            except ValueError as error:
+                raise ValueError(f"Row {index} in {csv_path.name} has an invalid rating: {skill_text}") from error
+
+            if not 1 <= skill <= 10:
+                raise ValueError(f"Row {index} in {csv_path.name} has a rating outside 1-10: {skill_text}")
+
+            players.append(
+                {
+                    "id": f"player-{len(players) + 1}",
+                    "name": name,
+                    "skill": skill,
+                    "source": "preset",
+                }
+            )
+
+    if not players:
+        raise ValueError(f"{csv_path.name} does not contain any players.")
+
+    return players
+
+
+PLAYERS = load_players_from_csv(RATINGS_CSV)
 
 
 @dataclass(frozen=True)
 class TeamCandidate:
     teams: tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]
-    team_totals: tuple[int, int, int]
+    team_totals: tuple[float, float, float]
     averages: tuple[float, float, float]
     imbalance: float
     spread: float
@@ -63,12 +86,12 @@ def team_sizes(player_count: int) -> list[int]:
 
 def average_skill(team: Iterable[str], roster_lookup: dict[str, dict[str, object]]) -> float:
     members = list(team)
-    return sum(int(roster_lookup[player_id]["skill"]) for player_id in members) / len(members)
+    return sum(float(roster_lookup[player_id]["skill"]) for player_id in members) / len(members)
 
 
-def team_total_skill(team: Iterable[str], roster_lookup: dict[str, dict[str, object]]) -> int:
+def team_total_skill(team: Iterable[str], roster_lookup: dict[str, dict[str, object]]) -> float:
     members = list(team)
-    return sum(int(roster_lookup[player_id]["skill"]) for player_id in members)
+    return sum(float(roster_lookup[player_id]["skill"]) for player_id in members)
 
 
 def canonical_teams(teams: Iterable[Iterable[str]]) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
@@ -154,7 +177,7 @@ def build_random_candidate(
             teams.append(tuple(sorted(remaining_ids)))
             break
 
-        current_target = sum(int(roster_lookup[player_id]["skill"]) for player_id in remaining_ids) / remaining_team_count
+        current_target = sum(float(roster_lookup[player_id]["skill"]) for player_id in remaining_ids) / remaining_team_count
         team = choose_balanced_team(remaining_ids, size, current_target, roster_lookup, rng)
         teams.append(tuple(sorted(team)))
         remaining_ids = [player_id for player_id in remaining_ids if player_id not in team]
@@ -293,7 +316,7 @@ def validate_selected_players(selected_players: object) -> list[dict[str, object
             raise ValueError("Duplicate players were submitted.")
         if not isinstance(name, str) or not name.strip():
             raise ValueError(f"Player {index} is missing a name.")
-        if not isinstance(skill, int) or not 1 <= skill <= 10:
+        if not isinstance(skill, (int, float)) or isinstance(skill, bool) or not 1 <= float(skill) <= 10:
             raise ValueError(f"Player {name} must have a skill between 1 and 10.")
         if source not in {"preset", "guest"}:
             raise ValueError(f"Player {name} has an invalid source.")
@@ -303,7 +326,7 @@ def validate_selected_players(selected_players: object) -> list[dict[str, object
             {
                 "id": player_id,
                 "name": name.strip(),
-                "skill": skill,
+                "skill": round(float(skill), 2),
                 "source": source,
             }
         )
