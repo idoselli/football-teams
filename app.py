@@ -9,7 +9,7 @@ from itertools import combinations
 from pathlib import Path
 from typing import Iterable
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 from werkzeug.exceptions import BadRequest
 
 
@@ -342,6 +342,11 @@ def generate_suggestions(selected_players: list[dict[str, object]]) -> list[dict
 @app.get("/")
 def index() -> str:
     return render_template("index.html", player_data_json=json.dumps(PLAYERS, ensure_ascii=False, separators=(",", ":")))
+
+
+@app.get("/static/<path:filename>")
+def static_files(filename: str):
+    return send_from_directory(STATIC_DIR, filename)
 
 
 @app.post("/api/generate")
