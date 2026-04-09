@@ -5,17 +5,20 @@ import json
 import os
 import random
 from dataclasses import dataclass
-from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from itertools import combinations
 from pathlib import Path
 from typing import Iterable
+
+from flask import Flask, jsonify, render_template, request
+from werkzeug.exceptions import BadRequest
 
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 TEMPLATE_DIR = BASE_DIR / "templates"
 RATINGS_CSV = BASE_DIR / "ratings.csv"
+
+app = Flask(__name__, template_folder=str(TEMPLATE_DIR), static_folder=str(STATIC_DIR))
 
 
 def load_players_from_csv(csv_path: Path) -> list[dict[str, object]]:
@@ -112,17 +115,8 @@ def build_candidate(
     target_team_skill = sum(team_totals) / 3
     balance_penalty = round(sum((total - target_team_skill) ** 2 for total in team_totals), 4)
 
-    teammate_pairs = frozenset(
-        pair
-        for team in teams
-        for pair in combinations(team, 2)
-    )
-    trios = frozenset(
-        trio
-        for team in teams
-        if len(team) >= 3
-        for trio in combinations(team, 3)
-    )
+    teammate_pairs = frozenset(pair for team in teams for pair in combinations(team, 2))
+    trios = frozenset(trio for team in teams if len(team) >= 3 for trio in combinations(team, 3))
 
     return TeamCandidate(
         teams=teams,
@@ -202,9 +196,7 @@ def generate_candidates(
     return candidates[:110]
 
 
-def schedule_penalty(
-    combo: tuple[TeamCandidate, ...],
-) -> tuple[int, int, float]:
+def schedule_penalty(combo: tuple[TeamCandidate, ...]) -> tuple[int, int, float]:
     repeated_full_teams = sum(len(candidate.teams) for candidate in combo) - len({team for candidate in combo for team in candidate.teams})
     repeated_teammate_pairs = sum(len(candidate.teammate_pairs) for candidate in combo) - len(
         {pair for candidate in combo for pair in candidate.teammate_pairs}
@@ -223,19 +215,14 @@ def repeated_trios_across_schedule(combo: tuple[TeamCandidate, ...]) -> int:
     return len(shared_trios)
 
 
-def schedule_score(
-    combo: tuple[TeamCandidate, ...],
-) -> tuple[int, int, int, float, float]:
+def schedule_score(combo: tuple[TeamCandidate, ...]) -> tuple[int, int, int, float, float]:
     repeated_full_teams, repeated_teammate_pairs, balance_penalty = schedule_penalty(combo)
     repeated_trios = repeated_trios_across_schedule(combo)
     weighted_total = round((1000 * repeated_full_teams) + (10 * repeated_teammate_pairs) + balance_penalty, 4)
     return repeated_trios, repeated_full_teams, repeated_teammate_pairs, balance_penalty, weighted_total
 
 
-def choose_suggestions(
-    candidates: list[TeamCandidate],
-    limit: int = 3,
-) -> list[TeamCandidate]:
+def choose_suggestions(candidates: list[TeamCandidate], limit: int = 3) -> list[TeamCandidate]:
     if len(candidates) <= limit:
         return candidates
 
@@ -352,94 +339,28 @@ def generate_suggestions(selected_players: list[dict[str, object]]) -> list[dict
     ]
 
 
-class AppHandler(BaseHTTPRequestHandler):
-    def do_GET(self) -> None:
-        if self.path == "/":
-            self.serve_index()
-            return
-
-        if self.path.startswith("/static/"):
-            self.serve_static()
-            return
-
-        self.send_error(HTTPStatus.NOT_FOUND, "Page not found.")
-
-    def do_POST(self) -> None:
-        if self.path == "/api/generate":
-            self.handle_generate()
-            return
-
-        self.send_error(HTTPStatus.NOT_FOUND, "Page not found.")
-
-    def serve_index(self) -> None:
-        template = (TEMPLATE_DIR / "index.html").read_text(encoding="utf-8")
-        html = template.replace("__PLAYER_DATA__", json.dumps(PLAYERS, ensure_ascii=False, separators=(",", ":")))
-        body = html.encode("utf-8")
-
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def serve_static(self) -> None:
-        relative_path = self.path.removeprefix("/static/")
-        file_path = (STATIC_DIR / relative_path).resolve()
-
-        if not str(file_path).startswith(str(STATIC_DIR.resolve())) or not file_path.is_file():
-            self.send_error(HTTPStatus.NOT_FOUND, "Asset not found.")
-            return
-
-        content_type = "text/plain; charset=utf-8"
-        if file_path.suffix == ".css":
-            content_type = "text/css; charset=utf-8"
-        elif file_path.suffix == ".js":
-            content_type = "application/javascript; charset=utf-8"
-
-        body = file_path.read_bytes()
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def handle_generate(self) -> None:
-        try:
-            content_length = int(self.headers.get("Content-Length", "0"))
-            raw_body = self.rfile.read(content_length)
-            payload = json.loads(raw_body.decode("utf-8"))
-            selected_players = validate_selected_players(payload.get("selected_players", []))
-            suggestions = generate_suggestions(selected_players)
-            self.send_json({"suggestions": suggestions})
-        except ValueError as error:
-            self.send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
-        except json.JSONDecodeError:
-            self.send_json({"error": "Invalid JSON payload."}, status=HTTPStatus.BAD_REQUEST)
-
-    def send_json(self, payload: dict[str, object], status: HTTPStatus = HTTPStatus.OK) -> None:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, format: str, *args: object) -> None:
-        return
+@app.get("/")
+def index() -> str:
+    return render_template("index.html", player_data_json=json.dumps(PLAYERS, ensure_ascii=False, separators=(",", ":")))
 
 
-def main() -> None:
-    host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", "8000"))
-    server = ThreadingHTTPServer((host, port), AppHandler)
-    print(f"Serving football team app at http://{host}:{port}")
+@app.post("/api/generate")
+def api_generate():
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nShutting down server.")
-    finally:
-        server.server_close()
+        payload = request.get_json(silent=False)
+        if not isinstance(payload, dict):
+            raise ValueError("Invalid JSON payload.")
+
+        selected_players = validate_selected_players(payload.get("selected_players", []))
+        suggestions = generate_suggestions(selected_players)
+        return jsonify({"suggestions": suggestions})
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except BadRequest:
+        return jsonify({"error": "Invalid JSON payload."}), 400
 
 
 if __name__ == "__main__":
-    main()
+    host = os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", "8000"))
+    app.run(host=host, port=port, debug=False)

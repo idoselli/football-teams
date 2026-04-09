@@ -15,6 +15,7 @@ A lightweight Python web app for choosing who is coming to a football game and g
 Use any normal Python 3 installation:
 
 ```bash
+pip install -r requirements.txt
 python app.py
 ```
 
@@ -24,24 +25,23 @@ Then open:
 http://127.0.0.1:8000
 ```
 
-## Deploy on Render
+## Deploy on Vercel
 
-This app is now set up to run on Render:
+This app is now set up to run on Vercel as a Flask app:
 
-- It listens on `0.0.0.0`
-- It uses Render's `PORT` environment variable automatically
-- A `render.yaml` file is included for service setup
-- A `requirements.txt` file is included, even though there are no third-party packages
+- `app.py` exposes a Flask `app`
+- `api/index.py` is the Vercel Python entrypoint
+- `vercel.json` routes requests to the Flask app
+- Static files are served from `/static`
 
-If you deploy manually on Render, the important start command is:
+To deploy:
 
 ```bash
-python app.py
+vercel
 ```
 
 ## Notes
 
 - No database
 - No local storage
-- No third-party dependencies
-- Player names and skill ratings are hardcoded in `app.py` for now
+- Player names and skill ratings are loaded from `ratings.csv`

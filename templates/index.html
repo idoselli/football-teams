@@ -89,7 +89,7 @@
     </main>
 
     <script>
-      window.APP_PLAYERS = __PLAYER_DATA__;
+      window.APP_PLAYERS = {{ player_data_json|safe }};
     </script>
     <script src="/static/app.js"></script>
   </body>
